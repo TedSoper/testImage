@@ -10,22 +10,23 @@ import Foundation
 import UIKit
 
 class APIOperation: NSOperation {
-
+    
     var successCallback: ((Bool, AnyObject) -> ())?
     var failureCallback: ((Bool, NSError?) -> ())?
+    var progressCallback: ((CGFloat) -> ())?
     
     lazy internal var urlSession: NSURLSession = {
         let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
         configuration.HTTPMaximumConnectionsPerHost = 1
         configuration.requestCachePolicy = NSURLRequestCachePolicy.ReloadIgnoringLocalCacheData
         
-        let urlSession = NSURLSession(configuration: configuration)
+        let urlSession = NSURLSession(configuration: configuration, delegate: self, delegateQueue: nil)
         return urlSession
         }()
     
     var apiKeyValues: [String:String]?
-    var httpMethod: String? = "POST"
-    var apiString: String? = "192.168.11.6"
+    var httpMethod: String?
+    var apiString: String?
     
     override var asynchronous: Bool {
         return true
@@ -79,72 +80,50 @@ class APIOperation: NSOperation {
         mutableRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         
         switch (self.httpMethod!) {
-            case "POST":
-                var postString = ""
-                for (key, value) in self.apiKeyValues! {
-                    if !postString.isEmpty {
-                        postString += "&"
-                    }
-                    
-                    postString += "\(key)=\(value)"
+        case "POST":
+            var postString = ""
+            for (key, value) in self.apiKeyValues! {
+                if !postString.isEmpty {
+                    postString += "&"
                 }
                 
-                let postData = postString.dataUsingEncoding(NSASCIIStringEncoding, allowLossyConversion: true)
-                let postLength = String("\(postData!.length)")
-                
-                mutableRequest.setValue(postLength, forHTTPHeaderField: "Content-Length")
-                mutableRequest.HTTPBody = postData
-                break
+                postString += "\(key)=\(value)"
+            }
             
-            case "GET":
-                
-                break
+            let postData = postString.dataUsingEncoding(NSASCIIStringEncoding, allowLossyConversion: true)
+            let postLength = String("\(postData!.length)")
             
-            default:
+            mutableRequest.setValue(postLength, forHTTPHeaderField: "Content-Length")
+            mutableRequest.HTTPBody = postData
+            break
             
-                break
+        case "GET":
+            
+            break
+            
+        default:
+            
+            break
         }
         
-        
-        self.urlSession.dataTaskWithRequest(mutableRequest) { (data, response, error) -> Void in
-            if error == nil {
-                
-                // do catch clauses are so beautiful
-                // TIP: try throws an error if nil is returned
-                // TIP: throw breaks out of the do clause so code is not ran afterwards
-                do {
-                
-                    let dataDictionary = try NSJSONSerialization.JSONObjectWithData(data!, options: NSJSONReadingOptions.AllowFragments) as? NSDictionary
-                    
-                    print("\(self.apiString!) : \n\(dataDictionary!)")
-                        
-                    let status = dataDictionary!["status"] as? String
-                    if status == "error" {
-                        
-                        let userInfo = [
-                            NSLocalizedDescriptionKey as NSObject : dataDictionary!["message"]!
-                            ] as [NSObject: AnyObject]?
-                        
-                        let statusError: NSError = NSError(domain: "WeCompeteAPI Error", code: 0, userInfo: userInfo)
-                        
-                        throw statusError
-                        
-                    }
-                    
-                    self.reportSuccess(dataDictionary!)
-
-                } catch let error as NSError {
-                    
-                    print("Raw Data As String:\n\(NSString(data: data!, encoding: NSUTF8StringEncoding)!)")
-                    self.reportFailedWithError(error)
-                    
-                }
-                
-            } else {
+        urlSession.dataTaskWithRequest(mutableRequest) { (data, response, error) -> Void in
+            
+            guard error == nil else {
                 self.reportFailedWithError(error)
+                return
             }
-
-        }.resume()
+            
+            // do catch clauses are so beautiful
+            // TIP: try throws an error if nil is returned
+            // TIP: throw breaks out of the do clause so code is not ran afterwards
+            
+            
+            let resultString = String(data: data!, encoding: NSUTF8StringEncoding)!
+            
+            resultString.lowercaseString == "thanks" ? self.reportSuccess(resultString) : self.reportFailedWithError(nil)
+            
+            
+            }.resume()
         
         
     }
@@ -168,31 +147,36 @@ class APIOperation: NSOperation {
     
     func reportFailedWithError(error: NSError?, success: Bool = false) {
         print(error)
-        dispatch_async(dispatch_get_main_queue(), {
-
         
-            if self.failureCallback == nil {
-                
-                
-                let alert = UIAlertView(title: "Error", message: error!.localizedDescription, delegate: nil, cancelButtonTitle: "OK")
-                alert.show()
-            } else {
-                self.failureCallback?(success, error)
-            }
-            
-        })
+        
+        self.failureCallback?(success, error)
+        
         completeOperation()
     }
     
     func reportSuccess(results: AnyObject, success: Bool = true) {
         print("Finished task")
-        dispatch_async(dispatch_get_main_queue(), {
-
-            successCallback?(success, results)
-            
-        })
+        
+        successCallback?(success, results)
+        
         completeOperation()
     }
-
     
+    
+}
+
+extension APIOperation: NSURLSessionTaskDelegate {
+    
+    func URLSession(session: NSURLSession, task: NSURLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        let progress = CGFloat(totalBytesSent) / CGFloat(totalBytesExpectedToSend)
+        progressCallback?(progress)
+    }
+    
+    //    func URLSession(session: NSURLSession, downloadTask: NSURLSessionDownloadTask, didResumeAtOffset fileOffset: Int64, expectedTotalBytes: Int64) {
+    //
+    //    }
+    //
+    //    func URLSession(session: NSURLSession, downloadTask: NSURLSessionDownloadTask, didFinishDownloadingToURL location: NSURL) {
+    //
+    //    }
 }
