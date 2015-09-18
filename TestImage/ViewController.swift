@@ -72,9 +72,9 @@ class ViewController: UIViewController, UIImagePickerControllerDelegate, UINavig
         
         let imageData = UIImagePNGRepresentation(selectedImage)!
         let encoded64Image = imageData.base64EncodedDataWithOptions([])
-        let stringRepresentation64EncodedImage = NSString(data: encoded64Image, encoding: NSUTF8StringEncoding)!
+       let stringRepresentation64EncodedImage = encoded64Image.base64EncodedStringWithOptions(NSDataBase64EncodingOptions.Encoding64CharacterLineLength)
         
-        let parameters: [String:String] = ["image": String(stringRepresentation64EncodedImage)]
+        let parameters: [String:String] = ["image": stringRepresentation64EncodedImage]
 
         apiOperation = APIOperation(parameters: parameters, api: "http://192.168.11.4:5000", httpMethod: "POST")
         
